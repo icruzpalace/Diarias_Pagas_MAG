@@ -1,0 +1,133 @@
+---
+format:
+
+    html:
+
+        embed-resources: true
+
+        toc: true
+
+        toc-location: left
+
+        toc-title: ' '
+
+        theme: Spacelab
+---
+
+```{r, echo = FALSE}
+
+library(dplyr, warn.conflicts = FALSE)
+library(kableExtra, warn.conflicts = FALSE)
+library(ggplot2, warn.conflicts = FALSE)
+library(plotly, warn.conflicts = FALSE)
+
+```
+
+# Efeito da prevalência no Valor Preditivo
+
+Sejam  $p =$ prevalência, $s =$ sensibilidade, $e =$ especificidade, então:
+
+$$\textnormal{Valor Preditivo Positivo} = \frac{sp}{(1 - e)(1 - p) + sp}$$
+
+$$\textnormal{Valor Preditivo Negativo} = \frac{e(1 - p)}{e(1 - p) + (1 - s)p}$$
+
+```{r, echo = FALSE}
+s <- 0.99
+
+e <- 0.99
+
+p <- seq(from = 0, to = 1, by = 1e-4)
+
+VPP <- s * p / ((1 - e) * (1 - p) + s * p)
+
+VPN <- e * (1 - p) / (e * (1 - p) + (1 - s) * p)
+
+Grafico <- ggplot(data.frame(p = p, VPP = VPP, VPN = VPN)) +
+
+    geom_line(aes(x = p, y = VPP, color = 'Valor preditivo positivo')) +
+
+    geom_line(aes(x = p, y = VPN, color = 'Valor preditivo Negativo')) +
+
+    labs(x = 'Prevalência', y = 'Valor Preditivo') +
+
+    scale_color_manual(name = ' ', values = c('blue', 'red'))
+
+ggplotly(Grafico)
+
+```
+
+# SMOTE
+
+Synthetic Minority Over-sampling Technique é uma abordagem de sobreamostragem em que a classe minoritária é sobreamostrada criando amostras sintéticas. Essa abordagem resulta em um classificador com regiões de decisão mais gerais para as amostras da classe minoritária, em ralação ao Random OverSampling.
+
+As amostras sintéticas $s_i$ são geradas da seguinte maneira: seja $m_I$ um vetor das covariáveis da classe minoritária e $v_j$ um de seus $k$ vizinhos mais próximos e $u_i \sim U[0, 1]$
+
+$$s_i = m_i + u_i(v_j - m_i)$$
+
+Desse modo, a classe minoritária é sobreamostrada tomando cada amostra da classe minoritária e introduzindo exemplos sintéticos ao longo dos segmentos de reta que unem os $k$ vizinhos mais próximos da classe minoritária. 
+
+Dependendo da quantidade de sobreamostragem necessária, os vizinhos são escolhidos aleatoriamente entre os $k$ mais próximos. Por exemplo, se $k = 5$ e a quantidade de sobreamostragem necessária for de $200\%$, apenas dois vizinhos dos cinco mais próximos são escolhidos.
+
+## SMOTENC
+
+Embora o SMOTE não lide com conjuntos de dados contendo covariáveis nominais, ela pode ser generalizada para lidar com conjuntos de dados mistos de covariáveis contínuas e nominais. Essa abordagem é chamada de Synthetic Minority Over-sampling Technique Nominal Continuous.
+
+O procedimento do SMOTENC é feito da seguinte forma: 
+
+Seja $\sigma^*$ a mediana dos desvios padrão de todas as covariáveis contínuas da classe minoritária. Para cada uma das covariáveis nominais que diferem entre duas observações $x$ e $y$, $\sigma^*$ é incluída no cálculo da distância euclidiana da como segue
+
+$$d(x, y) = \sqrt{\sum_{i \in \textnormal{cont}} (x_i - y_i)^2 + \sum_{j \in \textnormal{diff cat}} \sigma^*}$$
+
+onde $\textnormal{cont}$ é o conjunto de índices das covariáveis continuas e $\textnormal{diff cat}$ é o conjunto de índices das covariáveis categoricas que diferem entre $x$ e $y$. O peso $\sigma^*$ é usado para penalizar a diferença de covariáveis nominais por uma quantidade relacionada à diferença típica nos valores das covariáveis contínuas.
+
+As covariáveis contínuas da amostra sintética são criadas usando a mesma abordagem da SMOTE descrita anteriormente, já as covariáveis nominais recebem o valor que ocorre na maioria dos $k$ vizinhos mais próximos, caso ambas as categorias.
+
+## SMOTEN
+
+Potencialmente, o SMOTE também pode ser estendido para conjuntos de dados contendo somente covariáveis nominais. A distância entre duas categorias de covariáveis correspondentes é definida seguinte forma:
+
+$$\delta(A, B) = \sum_{y\in Y} \mid p(y\mid A) - p(y\mid B) \mid^k$$
+
+onde $k$ é uma constante. Assim a distância entre duas observações $x$ e $y$ é dado por
+
+$$\Delta(x, y_i) = \sum_{i = 1}^D\delta(x_i, y_i)^r$$
+
+As amostras sintéticas são criadas usando a mesma abordagem do SMOTENC.
+
+# Borderline-SMOTE
+
+O método Borderline-SMOTE é uma variante do SMOTE que busca sobreamostrar apenas observações da classe minoritária na linha fronteira entre as duas classes. 
+
+Isso é feito porque, para alcançar uma melhor previsão, a maioria dos algoritmos de classificação tentam aprender a fronteira entre as duas classes da maneira mais exata possível no processo de treinamento e, como as observações na fronteira ou próximos a ela são mais propensos a serem classificados incorretamente do que aqueles distantes da fronteira, essas observações acabam sendo mais  importantes para a classificação.
+
+O procedimento do Borderline-SMOTE é feito da seguinte forma: 
+
+Primeiro, identificamos os exemplos minoritários na linha de fronteira, em seguida, exemplos sintéticos são gerados a partir deles e adicionados ao conjunto de treinamento original.
+
+Seja $X$ o conjunto de dados, $M$ as observações da classe minoritária e $N$ da classe majoritária, para cada $m_i\in M$ calculamos seus m vizinhos mais próximos do conjunto $X$. O número de observações majoritárias entre os $k$ vizinhos mais próximos é denotado por $\Delta_i$. Se $k = \Delta_i$, $m_i$ é considerado ruído e não é sobreamostrado. Se $k/2 ≤ \Delta_i < k$, como o número de vizinhos mais próximos majoritários de $m_i$ é maior que o número de seus vizinhos minoritários, $m_i$ é considerado facilmente classificável incorretamente e colocado no conjunto $DANGER$. Se $\Delta_i < k/2$ $m_i$ é seguro e não precisa participar das próximas etapas.
+
+## Borderline-SMOTE1
+
+Para cada observação em $DANGER$ são geradas amostras sintéticas da mesma maneira do SMOTE, porém  os vizinhos mais próximos não são escolhidos no conjunto $X$, mas sim em $M$.
+
+## Borderline-SMOTE2
+
+Para cada observação em $DANGER$ os vizinhos mais próximos são escolhidos no conjunto $X$, com a ressalva de que para os vizinhos da classe majoritária $u \sim U[0, 0.5]$ para que as novas amostras geradas fiquem mais próximos da classe minoritária.
+
+# ADASYN
+
+O método Adaptive Synthetic Sampling se baseia em uma abordagem similar aos algoritmos Borderline-SMOTE, porém, ao invés de sobreamostar exclusivamente as observações da classe minoritária localizadas na fronteira de decisão, o ADASYN determina a quantidade de amostras sintéticas a serem geradas para cada observação de forma adaptativa. Essa quantidade é proporcional à densidade local da classe majoritária em torno do exemplo em questão.
+
+O procedimento do ADASYN é feito da seguinte forma:
+
+Para cada exemplo minoritário $m_j$, calcula-se a razão $r_j$, que obtida calculado $r_j = \Delta_j/k$. A razão $r_j$ é então normalizada para obter:
+​
+$$\hat{r}_j = \frac{r_j}{\sum_{j = 1}^{\# P} r_j}$$
+
+Por fim, O número de amostras sintéticas a serem geradas a partir de $m_j$ é determinado pela seguinte fórmula $\hat{r}_j \cdot G$, onde $G$ é o número de amostras sintéticas que seriam gerados por obervação usando o SMOTE padrão.
+
+# Observações Importantes
+
+**Transformações não lineares das observações:** Muitas vezes os inputs do classificador não são as covariáveis em si mas sim uma transformação delas, caso essa trasnformação seja não linear o procedimento de criação de amostras sintéticas das covariáveis e depois transformalas não será equivalênte a transformalas e depois criar as amostras sintéticas.
+
+**Separação do conjunto de treino e teste:** É importante que que os procedimentos de oversampling sejam feitos após a separação do conjunto de treino e teste. Porque caso contrário é possivel que todas as observações da classe minoritária do conjunto de teste estejam no conjunto de treino (no caso de Random OverSampling) ou é compostas apenas de observações sintéticas.
